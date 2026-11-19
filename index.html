@@ -1,0 +1,1739 @@
+<!DOCTYPE html>
+<html lang="zh-HK" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>SpeedCoach OC Pro - 划艇 GPS 測速儀 & 節拍器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        marine: {
+                            black: '#000000',
+                            panel: '#0D1015',
+                            border: '#1E242D',
+                            amber: '#FFD600',
+                            cyan: '#00E5FF',
+                            green: '#00E676',
+                            red: '#FF3B30'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: #000000;
+            color: #FFFFFF;
+            height: 100dvh;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        button, [role="button"] {
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        input {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+        /* Beat flash animations */
+        @keyframes beatPulse {
+            0% { border-color: #FFD600; box-shadow: inset 0 0 24px rgba(255, 214, 0, 0.38); }
+            100% { border-color: #1E242D; box-shadow: inset 0 0 0px rgba(255, 214, 0, 0); }
+        }
+        @keyframes accentPulse {
+            0% { border-color: #00E5FF; box-shadow: inset 0 0 32px rgba(0, 229, 255, 0.55); }
+            100% { border-color: #1E242D; box-shadow: inset 0 0 0px rgba(0, 229, 255, 0); }
+        }
+        .pulse-beat {
+            animation: beatPulse 0.22s ease-out;
+        }
+        .pulse-accent {
+            animation: accentPulse 0.3s ease-out;
+        }
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D1015;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2C3545;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex flex-col justify-between bg-marine-black text-white font-sans">
+
+    <!-- ==================== 1. TOP HEADER BAR ==================== -->
+    <header class="relative z-10 flex items-center justify-between px-2.5 py-2 border-b border-marine-border bg-marine-panel shrink-0 gap-1.5">
+        <!-- App Title, GPS Status Pill & Retry GPS Button -->
+        <div class="flex items-center gap-1 min-w-0">
+            <span class="font-extrabold text-xs sm:text-sm tracking-tight text-white shrink-0">SC·OC</span>
+            <button type="button" id="gpsBadge" onclick="SC.openGpsHelp()" title="點擊查看 GPS 診斷與說明" class="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-black border border-marine-border text-[11px] font-mono truncate active:scale-95 transition">
+                <span id="gpsDot" class="w-2 h-2 rounded-full bg-marine-amber animate-pulse shrink-0"></span>
+                <span id="gpsText" class="text-gray-300 font-bold truncate">GPS 搜尋中...</span>
+            </button>
+            <button type="button" id="btnRetryGps" onclick="SC.retryGps()" class="px-2 py-1.5 rounded-lg bg-marine-cyan/15 border border-marine-cyan/40 text-[11px] font-extrabold text-marine-cyan shrink-0 active:scale-95 transition">
+                重試 GPS
+            </button>
+        </div>
+
+        <!-- Right Header Action Buttons -->
+        <div class="flex items-center gap-1 shrink-0">
+            <button type="button" id="btnOpenWorkout" onclick="SC.openWorkoutModal()" class="px-2 py-1.5 rounded-lg bg-marine-cyan/15 border border-marine-cyan/50 text-xs font-extrabold text-marine-cyan active:scale-95 transition">
+                模式
+            </button>
+            <button type="button" id="btnToggleDemo" onclick="SC.toggleDemo()" class="px-2 py-1.5 rounded-lg bg-black border border-marine-border text-xs font-bold text-gray-300 active:scale-95 transition">
+                模擬: 關
+            </button>
+            <button type="button" id="btnOpenHistory" onclick="SC.openHistoryModal()" class="px-2 py-1.5 rounded-lg bg-black border border-marine-border text-xs font-bold text-gray-200 active:scale-95 transition">
+                成績
+            </button>
+            <button type="button" id="btnWaterLock" onclick="SC.enableWaterLock()" class="px-2 py-1.5 rounded-lg bg-marine-amber/15 border border-marine-amber/50 text-xs font-extrabold text-marine-amber active:scale-95 transition">
+                鎖定
+            </button>
+        </div>
+    </header>
+
+    <!-- ==================== 2. CORE MARINE TELEMETRY HUD ==================== -->
+    <main class="relative z-10 flex-1 flex flex-col justify-between p-2.5 gap-2 overflow-hidden">
+
+        <!-- TOP PRIMARY CARD: SPEED (km/h) / 500M SPLIT TOGGLE -->
+        <section id="cardPrimaryMetric" role="button" tabindex="0" onclick="SC.togglePrimaryMetric()" class="flex-1 min-h-[115px] flex flex-col justify-between rounded-2xl bg-marine-panel border-2 border-marine-border p-3 active:border-gray-500 transition">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span id="primaryLabel" class="text-xs sm:text-sm font-extrabold tracking-wider uppercase text-marine-cyan">船速 SPEED</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-300 font-semibold">點擊切換 Split</span>
+                </div>
+                <span id="primaryUnit" class="text-sm sm:text-base font-mono font-bold text-gray-400">km/h</span>
+            </div>
+
+            <!-- Huge High-Contrast Digital Readout -->
+            <div class="my-auto text-center">
+                <div id="primaryValue" class="font-mono font-extrabold text-[4.2rem] sm:text-[5.2rem] leading-none tracking-tight text-white tabular-nums">
+                    0.0
+                </div>
+            </div>
+
+            <!-- Bottom Strip: Secondary Speed & Session Avg/Max -->
+            <div class="flex items-center justify-between pt-1.5 border-t border-white/10 text-xs font-mono">
+                <div>
+                    <span id="secondarySpeedLabel" class="text-gray-400">500m Split: </span>
+                    <span id="secondarySpeedValue" class="font-bold text-marine-amber">--:--.-</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span>均:<strong id="avgSpeedValue" class="text-white ml-0.5">0.0</strong></span>
+                    <span>極:<strong id="maxSpeedValue" class="text-marine-green ml-0.5">0.0</strong></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- MIDDLE ROW: 2 COLUMNS (LEFT = SPM & DPS, RIGHT = INTERVAL / DISTANCE / SET TIMER) -->
+        <section class="grid grid-cols-2 gap-2 shrink-0">
+            <!-- LEFT COLUMN: LIVE SPM + DPS (Tap to manual stroke count) -->
+            <div id="cardSpm" role="button" tabindex="0" onclick="SC.manualStroke()" class="rounded-2xl bg-marine-panel border border-marine-border p-2.5 flex flex-col justify-between active:bg-white/10 transition">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-extrabold text-marine-amber tracking-wide">槳頻 LIVE SPM</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-marine-amber/15 text-marine-amber font-bold">點按測頻</span>
+                </div>
+
+                <div class="flex items-baseline justify-between my-1">
+                    <span id="liveSpmValue" class="font-mono font-extrabold text-4xl sm:text-5xl text-marine-amber tabular-nums leading-none">0</span>
+                    <div class="text-right font-mono">
+                        <div class="text-[10px] text-gray-400">總槳數</div>
+                        <div id="totalStrokesValue" class="text-sm font-bold text-white">0</div>
+                    </div>
+                </div>
+
+                <div class="pt-1.5 border-t border-white/10 flex items-center justify-between text-xs font-mono">
+                    <span class="text-gray-400">划距 DPS</span>
+                    <span id="dpsValue" class="font-extrabold text-marine-green">0.00 m</span>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: INTERVAL PHASE / DISTANCE / SET TIMER (Tap to open Interval Setup) -->
+            <div id="cardIntervalStatus" role="button" tabindex="0" onclick="SC.openWorkoutModal()" class="rounded-2xl bg-marine-panel border border-marine-cyan/40 p-2.5 flex flex-col justify-between active:bg-white/10 transition">
+                <div class="flex items-center justify-between gap-1">
+                    <span id="phaseBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-marine-cyan/20 text-marine-cyan font-extrabold truncate">READY 4×50m</span>
+                    <span class="text-[10px] text-gray-400 font-bold shrink-0">設定 ⚙</span>
+                </div>
+
+                <!-- Distance / Rest Countdown Readout -->
+                <div class="my-1">
+                    <div class="flex items-baseline justify-between">
+                        <span id="intervalPrimaryDist" class="font-mono font-extrabold text-3xl sm:text-4xl text-white tabular-nums leading-none">0<span class="text-sm text-gray-400 ml-0.5">m</span></span>
+                        <span id="intervalTargetHint" class="text-xs font-mono font-bold text-marine-cyan">休 04:00</span>
+                    </div>
+                    <!-- Progress bar -->
+                    <div class="w-full h-1.5 bg-black rounded-full overflow-hidden mt-1.5">
+                        <div id="intervalProgressBar" class="h-full bg-marine-cyan transition-all duration-150" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Set Timer -->
+                <div class="pt-1 border-t border-white/10 flex items-center justify-between text-xs font-mono">
+                    <span id="setTimerLabel" class="text-gray-400">單組計時</span>
+                    <span id="setTimerValue" class="font-extrabold text-white tabular-nums">00:00.0</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- PRIMARY TRANSPORT CONTROLS -->
+        <section class="grid grid-cols-3 gap-2 shrink-0">
+            <button type="button" id="btnStartPause" onclick="SC.toggleStartPause()" class="col-span-2 py-3 rounded-xl bg-marine-green text-black font-extrabold text-base tracking-wide shadow-lg active:scale-[0.98] transition flex items-center justify-center gap-2">
+                <span id="startPauseText">▶ 開始訓練 START</span>
+            </button>
+            <button type="button" id="btnStopReset" onclick="SC.stopAndReset()" class="py-3 rounded-xl bg-marine-panel border border-marine-border text-gray-200 font-extrabold text-sm active:bg-gray-800 active:scale-[0.98] transition">
+                ⏹ 結束 / 重設
+            </button>
+        </section>
+
+        <!-- ==================== 3. INTEGRATED LOW-LATENCY METRONOME ==================== -->
+        <section id="pacerPanel" class="rounded-2xl bg-marine-panel border-2 border-marine-border p-2.5 shrink-0 transition-colors">
+            <!-- Top Row: Title, Visual Beat LED, Accent Selector & Auto-Link Toggle -->
+            <div class="flex items-center justify-between gap-1.5 mb-2">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-extrabold tracking-wider text-marine-amber uppercase">節拍器</span>
+                    <span id="beatLed" class="w-3 h-3 rounded-full bg-gray-700 transition-transform duration-75"></span>
+                    <span id="beatCountLabel" class="text-[11px] font-mono text-gray-400">0拍</span>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                    <button type="button" id="btnAccentMode" onclick="SC.cycleAccent()" class="px-2 py-1 rounded-md bg-black border border-marine-border text-[11px] font-bold text-marine-cyan active:scale-95">
+                        每10槳
+                    </button>
+                    <button type="button" id="btnAutoLink" onclick="SC.toggleAutoLink()" class="px-2 py-1 rounded-md bg-marine-green/20 border border-marine-green/60 text-[11px] font-extrabold text-marine-green active:scale-95">
+                        連動: 開
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Pacer Controls: [-5] [-1] [TARGET SPM] [+1] [+5] [ON/OFF] -->
+            <div class="flex items-center justify-between gap-1.5">
+                <div class="flex items-center gap-1">
+                    <button type="button" onclick="SC.adjustSpm(-5)" class="w-10 py-3 rounded-xl bg-black border border-marine-border text-gray-300 font-mono font-extrabold text-sm active:bg-gray-800 active:scale-95">
+                        -5
+                    </button>
+                    <button type="button" onclick="SC.adjustSpm(-1)" class="w-11 py-3 rounded-xl bg-black border border-marine-border text-white font-mono font-extrabold text-xl active:bg-gray-800 active:scale-95">
+                        -1
+                    </button>
+                </div>
+
+                <!-- Target SPM Digital Box -->
+                <div class="flex-1 text-center bg-black/70 rounded-xl py-1 px-1 border border-white/5">
+                    <div class="text-[9px] font-bold text-gray-400 uppercase">TARGET SPM</div>
+                    <div id="targetSpmDisplay" class="font-mono font-extrabold text-3xl text-marine-amber tabular-nums leading-none">
+                        68
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <button type="button" onclick="SC.adjustSpm(1)" class="w-11 py-3 rounded-xl bg-black border border-marine-border text-white font-mono font-extrabold text-xl active:bg-gray-800 active:scale-95">
+                        +1
+                    </button>
+                    <button type="button" onclick="SC.adjustSpm(5)" class="w-10 py-3 rounded-xl bg-black border border-marine-border text-gray-300 font-mono font-extrabold text-sm active:bg-gray-800 active:scale-95">
+                        +5
+                    </button>
+                </div>
+
+                <!-- Master Metronome Toggle -->
+                <button type="button" id="btnTogglePacer" onclick="SC.togglePacer()" class="w-20 py-2.5 rounded-xl bg-marine-amber/20 border-2 border-marine-amber text-marine-amber font-extrabold text-xs leading-tight flex flex-col items-center justify-center active:scale-95 transition">
+                    <span>節拍器</span>
+                    <span id="pacerStatusText" class="text-sm font-mono mt-0.5">關</span>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== NON-BLOCKING TOAST NOTIFICATION ==================== -->
+    <div id="toastBanner" style="display:none; pointer-events:none;" class="fixed top-14 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-marine-panel border border-marine-amber text-xs font-extrabold text-marine-amber shadow-xl whitespace-nowrap">
+        提示訊息
+    </div>
+
+    <!-- ==================== 4. INTERVAL & WORKOUT SETUP MODAL ==================== -->
+    <div id="workoutModal" style="display:none; pointer-events:none;" class="fixed inset-0 z-50 bg-black/95 flex-col justify-between p-4 overflow-y-auto">
+        <div>
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-marine-border">
+                <h2 class="text-lg font-extrabold text-white">訓練模式設定 (Workout Setup)</h2>
+                <button type="button" onclick="SC.closeWorkoutModal()" class="px-3 py-1.5 rounded-xl bg-marine-panel border border-marine-border text-gray-300 font-bold text-sm">
+                    取消 ✕
+                </button>
+            </div>
+
+            <!-- Mode Tabs -->
+            <div class="grid grid-cols-2 gap-2 my-3">
+                <button type="button" id="tabIntervalMode" onclick="SC.setDraftMode('INTERVAL')" class="py-2.5 rounded-xl bg-marine-cyan text-black font-extrabold text-sm transition">
+                    間歇訓練 (Interval)
+                </button>
+                <button type="button" id="tabFreeMode" onclick="SC.setDraftMode('FREE')" class="py-2.5 rounded-xl bg-marine-panel border border-marine-border text-gray-300 font-extrabold text-sm transition">
+                    自由划 (Just Row)
+                </button>
+            </div>
+
+            <!-- Interval Configuration Section -->
+            <div id="intervalConfigSection" class="space-y-3">
+                <!-- Quick Presets -->
+                <div>
+                    <div class="text-xs font-bold text-gray-400 mb-1.5">快速預設範本 (Presets)</div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="SC.applyPreset('4x50m')" class="py-2.5 px-2 rounded-xl bg-marine-panel border border-marine-cyan/50 text-xs font-extrabold text-marine-cyan active:scale-95">
+                            4×50m / 休4分
+                        </button>
+                        <button type="button" onclick="SC.applyPreset('6x200m')" class="py-2.5 px-2 rounded-xl bg-marine-panel border border-marine-border text-xs font-bold text-gray-200 active:scale-95">
+                            6×200m / 休1分30秒
+                        </button>
+                        <button type="button" onclick="SC.applyPreset('8x45s')" class="py-2.5 px-2 rounded-xl bg-marine-panel border border-marine-border text-xs font-bold text-gray-200 active:scale-95">
+                            8×45秒 / 休1分
+                        </button>
+                        <button type="button" onclick="SC.applyPreset('1x500m')" class="py-2.5 px-2 rounded-xl bg-marine-panel border border-marine-border text-xs font-bold text-gray-200 active:scale-95">
+                            1×500m 計時
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Number of Sets -->
+                <div class="rounded-2xl bg-marine-panel border border-marine-border p-3 flex items-center justify-between">
+                    <div>
+                        <div class="text-sm font-extrabold text-white">總組數 (Sets)</div>
+                        <div class="text-xs text-gray-400">範圍 1 – 30 組</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="SC.stepInput('inputSets', -1, 1, 30)" class="w-11 h-11 rounded-xl bg-black border border-marine-border text-xl font-extrabold text-white">−</button>
+                        <input id="inputSets" type="number" min="1" max="30" value="4" class="w-14 h-11 text-center bg-black border border-marine-border rounded-xl font-mono font-extrabold text-lg text-marine-amber">
+                        <button type="button" onclick="SC.stepInput('inputSets', 1, 1, 30)" class="w-11 h-11 rounded-xl bg-black border border-marine-border text-xl font-extrabold text-white">+</button>
+                    </div>
+                </div>
+
+                <!-- Work Target Type & Value -->
+                <div class="rounded-2xl bg-marine-panel border border-marine-border p-3 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-extrabold text-white">衝刺目標 (Work)</span>
+                        <div class="flex rounded-lg bg-black p-0.5 border border-marine-border">
+                            <button type="button" id="btnWorkTypeDist" onclick="SC.setDraftWorkType('DIST')" class="px-2.5 py-1 rounded-md bg-marine-amber text-black text-xs font-extrabold">距離 (米)</button>
+                            <button type="button" id="btnWorkTypeTime" onclick="SC.setDraftWorkType('TIME')" class="px-2.5 py-1 rounded-md text-gray-400 text-xs font-bold">時間 (秒)</button>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span id="workUnitHint" class="text-xs text-gray-400">每組衝刺米數 (m)</span>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="SC.stepWorkVal(-1)" class="w-11 h-11 rounded-xl bg-black border border-marine-border text-xl font-extrabold text-white">−</button>
+                            <input id="inputWorkVal" type="number" min="5" max="10000" value="50" class="w-20 h-11 text-center bg-black border border-marine-border rounded-xl font-mono font-extrabold text-lg text-white">
+                            <button type="button" onclick="SC.stepWorkVal(1)" class="w-11 h-11 rounded-xl bg-black border border-marine-border text-xl font-extrabold text-white">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rest Duration (Minutes & Seconds) -->
+                <div class="rounded-2xl bg-marine-panel border border-marine-border p-3">
+                    <div class="text-sm font-extrabold text-white mb-2">組間休息時間 (Rest)</div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="flex items-center justify-between bg-black rounded-xl p-2 border border-marine-border">
+                            <span class="text-xs text-gray-400 font-bold">分</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="SC.stepInput('inputRestMin', -1, 0, 59)" class="w-8 h-8 rounded-lg bg-marine-panel text-white font-bold">−</button>
+                                <input id="inputRestMin" type="number" min="0" max="59" value="4" class="w-10 text-center bg-transparent font-mono font-extrabold text-base text-marine-cyan">
+                                <button type="button" onclick="SC.stepInput('inputRestMin', 1, 0, 59)" class="w-8 h-8 rounded-lg bg-marine-panel text-white font-bold">+</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between bg-black rounded-xl p-2 border border-marine-border">
+                            <span class="text-xs text-gray-400 font-bold">秒</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="SC.stepInput('inputRestSec', -15, 0, 59)" class="w-8 h-8 rounded-lg bg-marine-panel text-white font-bold">−</button>
+                                <input id="inputRestSec" type="number" min="0" max="59" value="0" class="w-10 text-center bg-transparent font-mono font-extrabold text-base text-marine-cyan">
+                                <button type="button" onclick="SC.stepInput('inputRestSec', 15, 0, 59)" class="w-8 h-8 rounded-lg bg-marine-panel text-white font-bold">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Free Row Description -->
+            <div id="freeModeSection" class="hidden rounded-2xl bg-marine-panel border border-marine-border p-4 text-center space-y-2">
+                <div class="text-base font-extrabold text-marine-cyan">自由划模式 (Just Row)</div>
+                <p class="text-xs text-gray-300 leading-relaxed">
+                    不設距離與組數限制，連續記錄總時間、總距離、即時船速、500m Split 與槳頻。
+                </p>
+            </div>
+        </div>
+
+        <!-- Apply Settings Button -->
+        <button type="button" onclick="SC.applyWorkoutSettings()" class="w-full py-3.5 mt-4 rounded-2xl bg-marine-green text-black font-extrabold text-base tracking-wide shadow-lg active:scale-[0.98] transition">
+            ✓ 套用設定 (Apply)
+        </button>
+    </div>
+
+    <!-- ==================== 5. RESULTS & SPLIT HISTORY MODAL ==================== -->
+    <div id="historyModal" style="display:none; pointer-events:none;" class="fixed inset-0 z-50 bg-black/95 flex-col justify-between p-4">
+        <div class="flex items-center justify-between pb-3 border-b border-marine-border shrink-0">
+            <div>
+                <h2 class="text-lg font-extrabold text-white">分段成績表 & 訓練記錄</h2>
+                <p class="text-xs text-gray-400">查看每組速度、500m Split 與平均 SPM</p>
+            </div>
+            <button type="button" onclick="SC.closeHistoryModal()" class="px-3 py-1.5 rounded-xl bg-marine-panel border border-marine-border text-gray-300 font-bold text-sm">
+                關閉 ✕
+            </button>
+        </div>
+
+        <!-- Export / Clear Buttons -->
+        <div class="flex gap-2 my-3 shrink-0">
+            <button type="button" onclick="SC.exportCsv()" class="flex-1 py-2.5 rounded-xl bg-marine-cyan text-black font-extrabold text-xs tracking-wide active:scale-95 transition">
+                ⬇ 匯出 CSV 檔案
+            </button>
+            <button type="button" onclick="SC.clearHistory()" class="px-4 py-2.5 rounded-xl bg-marine-panel border border-marine-red/50 text-marine-red font-bold text-xs active:scale-95 transition">
+                清除全部
+            </button>
+        </div>
+
+        <!-- Content Container -->
+        <div id="historyContent" class="flex-1 overflow-y-auto space-y-3 pr-1"></div>
+    </div>
+
+    <!-- ==================== 6. WATER LOCK OVERLAY ==================== -->
+    <div id="waterLockOverlay" style="display:none; pointer-events:none;" class="fixed inset-0 z-50 bg-black/55 backdrop-blur-[1px] flex-col items-center justify-end pb-12">
+        <div class="bg-black/95 border-2 border-marine-amber rounded-3xl p-5 mx-4 max-w-xs w-full text-center shadow-2xl">
+            <div class="text-marine-amber font-extrabold text-base mb-1">🔒 防誤觸螢幕已鎖定</div>
+            <p class="text-xs text-gray-300 mb-4">數據及節拍器繼續運作，防止水花誤觸</p>
+
+            <button type="button" id="btnUnlockHold"
+                onmousedown="SC.startUnlockHold(event)"
+                onmouseup="SC.cancelUnlockHold()"
+                onmouseleave="SC.cancelUnlockHold()"
+                ontouchstart="SC.startUnlockHold(event)"
+                ontouchend="SC.cancelUnlockHold()"
+                ontouchcancel="SC.cancelUnlockHold()"
+                class="relative w-full py-3.5 rounded-2xl bg-marine-panel border border-marine-amber/60 overflow-hidden font-extrabold text-sm text-white">
+                <div id="unlockProgressFill" class="absolute inset-y-0 left-0 bg-marine-amber/40 w-0"></div>
+                <span class="relative z-10">長按 1.5 秒解鎖 (HOLD)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 7. GPS TROUBLESHOOTING MODAL ==================== -->
+    <div id="gpsHelpModal" style="display:none; pointer-events:none;" class="fixed inset-0 z-50 bg-black/95 flex-col justify-between p-4 overflow-y-auto">
+        <div class="space-y-3">
+            <div class="flex items-center justify-between pb-3 border-b border-marine-border">
+                <div>
+                    <h2 class="text-lg font-extrabold text-marine-cyan">📡 GPS 訊號診斷與故障排除</h2>
+                    <p class="text-xs text-gray-400">iPhone / Android 網頁版定位要求說明</p>
+                </div>
+                <button type="button" onclick="SC.closeGpsHelp()" class="px-3 py-1.5 rounded-xl bg-marine-panel border border-marine-border text-gray-300 font-bold text-sm">
+                    關閉 ✕
+                </button>
+            </div>
+
+            <!-- Live Diagnostic Status Box -->
+            <div class="rounded-2xl bg-marine-panel border border-marine-border p-3 font-mono text-xs space-y-1.5">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">目前定位狀態:</span>
+                    <span id="diagStatusText" class="font-bold text-marine-amber">檢查中...</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">連線安全協定:</span>
+                    <span id="diagProtocolText" class="font-bold text-white">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">視窗框架環境:</span>
+                    <span id="diagFrameText" class="font-bold text-white">--</span>
+                </div>
+            </div>
+
+            <div class="space-y-2.5 text-xs leading-relaxed">
+                <div class="rounded-2xl bg-marine-panel border border-marine-border p-3">
+                    <div class="font-extrabold text-marine-amber mb-1">1. 必須使用 HTTPS 網址開啟（不能用本機檔案）</div>
+                    <p class="text-gray-300">
+                        蘋果 iOS Safari 與 Android 瀏覽器出於私隱限制，若直接打開本機 <code class="text-marine-cyan">file://</code> 網頁，系統會直接封鎖 GPS。請上載至免費靜態空間（如 GitHub Pages / Netlify / Vercel）以 <code class="text-marine-green">https://</code> 開啟。
+                    </p>
+                </div>
+
+                <div class="rounded-2xl bg-marine-panel border border-marine-border p-3">
+                    <div class="font-extrabold text-marine-amber mb-1">2. 預覽視窗框架限制 (iFrame Sandbox)</div>
+                    <p class="text-gray-300">
+                        如果你目前喺對話預覽框入面測試，外層框架可能會阻擋定位權限。請喺獨立 Safari 分頁開啟使用。
+                    </p>
+                </div>
+
+                <div class="rounded-2xl bg-marine-panel border border-marine-border p-3">
+                    <div class="font-extrabold text-marine-amber mb-1">3. iPhone 定位權限與戶外天空視野</div>
+                    <ul class="list-disc pl-4 text-gray-300 space-y-1">
+                        <li>前往 iPhone <strong>設定 &gt; 隱私權與安全性 &gt; 定位服務</strong>（確保已開啟）。</li>
+                        <li>點選 <strong>Safari 網站</strong>，將權限設為 <strong>「使用 App 期間」</strong>並開啟<strong>「準確位置」</strong>。</li>
+                        <li>室內收唔到衛星訊號時，可按右上角<strong>「模擬: 關」</strong>測試完整訓練功能。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 mt-4">
+            <button type="button" onclick="SC.closeGpsHelp(); SC.retryGps();" class="py-3 rounded-2xl bg-marine-cyan text-black font-extrabold text-sm active:scale-95 transition">
+                🔄 立即重新搜尋 GPS
+            </button>
+            <button type="button" onclick="SC.closeGpsHelp(); SC.enableDemoFromModal();" class="py-3 rounded-2xl bg-marine-panel border border-marine-amber text-marine-amber font-extrabold text-sm active:scale-95 transition">
+                測試室內模擬模式
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * SPEEDCOACH OC PRO - GLOBAL RELIABLE CONTROLLER (WINDOW.SC)
+         * ============================================================================
+         */
+        window.SC = (function () {
+            'use strict';
+
+            const STORAGE_KEY = 'speedcoach_oc_pro_logs_v2';
+
+            const state = {
+                primaryMode: 'SPEED', // 'SPEED' | 'SPLIT'
+                demoMode: false,
+                isLocked: false,
+
+                // Workout Configuration (Default: 4 sets x 50m work, 4:00 rest)
+                workoutMode: 'INTERVAL', // 'INTERVAL' | 'FREE'
+                totalSets: 4,
+                workType: 'DIST', // 'DIST' | 'TIME'
+                workTarget: 50,
+                restSec: 240,
+
+                // Live Workout Execution State
+                isRunning: false,
+                phase: 'READY', // 'READY' | 'WORK' | 'REST' | 'DONE'
+                currentSet: 1,
+                totalElapsedMs: 0,
+                phaseElapsedMs: 0,
+                phaseDistanceM: 0,
+                phaseStrokes: 0,
+                totalDistanceM: 0,
+                totalStrokes: 0,
+                lastTickTime: 0,
+                mainLoopId: null,
+                demoSimId: null,
+                lastRestCountdownSec: -1,
+                currentSplits: [],
+
+                // Telemetry & Sensors
+                currentSpeedKmh: 0,
+                maxSpeedKmh: 0,
+                lastLat: null,
+                lastLon: null,
+                lastPosTime: null,
+                gpsAccuracy: null,
+                gpsWatchId: null,
+                gpsFallbackTimer: null,
+                gpsDiagnosticReason: '正在初始化定位...',
+
+                // Stroke Rate (SPM)
+                liveSpm: 0,
+                lastStrokeTime: 0,
+                strokeTimestamps: [],
+                accelFiltered: 0,
+                motionListenerAttached: false,
+                motionPermissionGranted: false,
+
+                // Metronome (Web Audio API)
+                targetSpm: 68,
+                pacerActive: false,
+                autoLinkPacer: true,
+                accentMode: 10, // 10, 20, or 0
+                beatCounter: 0,
+                audioCtx: null,
+                nextNoteTime: 0,
+                schedulerId: null,
+
+                // Wake Lock
+                wakeLockObj: null,
+
+                // Draft modal state
+                draftWorkoutMode: 'INTERVAL',
+                draftWorkType: 'DIST'
+            };
+
+            function $(id) {
+                return document.getElementById(id);
+            }
+
+            // --- SAFE OVERLAY HELPERS (STRICTLY NON-BLOCKING WHEN CLOSED) ---
+            function openModal(id) {
+                const el = $(id);
+                if (!el) return;
+                el.style.display = 'flex';
+                el.style.pointerEvents = 'auto';
+            }
+
+            function closeModal(id) {
+                const el = $(id);
+                if (!el) return;
+                el.style.display = 'none';
+                el.style.pointerEvents = 'none';
+            }
+
+            let toastTimer = null;
+            function showToast(msg) {
+                const banner = $('toastBanner');
+                if (!banner) return;
+                banner.textContent = msg;
+                banner.style.display = 'block';
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    banner.style.display = 'none';
+                }, 2400);
+            }
+
+            // --- WAKE LOCK ---
+            async function requestWakeLock() {
+                try {
+                    if ('wakeLock' in navigator && !state.wakeLockObj) {
+                        state.wakeLockObj = await navigator.wakeLock.request('screen');
+                        state.wakeLockObj.addEventListener('release', () => {
+                            state.wakeLockObj = null;
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            // --- WEB AUDIO API ENGINE ---
+            function unlockAudio() {
+                try {
+                    if (!state.audioCtx) {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtx) state.audioCtx = new AudioCtx();
+                    }
+                    if (state.audioCtx && state.audioCtx.state === 'suspended') {
+                        state.audioCtx.resume();
+                    }
+                } catch (e) {}
+            }
+
+            function scheduleBeatSound(time, isAccent) {
+                try {
+                    if (!state.audioCtx) return;
+                    const osc = state.audioCtx.createOscillator();
+                    const gain = state.audioCtx.createGain();
+                    osc.type = isAccent ? 'triangle' : 'sine';
+                    osc.frequency.setValueAtTime(isAccent ? 1560 : 1040, time);
+
+                    gain.gain.setValueAtTime(0.001, time);
+                    gain.gain.exponentialRampToValueAtTime(isAccent ? 0.95 : 0.75, time + 0.008);
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + (isAccent ? 0.11 : 0.075));
+
+                    osc.connect(gain);
+                    gain.connect(state.audioCtx.destination);
+                    osc.start(time);
+                    osc.stop(time + 0.12);
+
+                    const delayMs = Math.max(0, (time - state.audioCtx.currentTime) * 1000);
+                    setTimeout(() => triggerVisualBeat(isAccent), delayMs);
+                } catch (e) {}
+            }
+
+            function triggerVisualBeat(isAccent) {
+                if (!state.pacerActive) return;
+                const panel = $('pacerPanel');
+                const led = $('beatLed');
+                const lbl = $('beatCountLabel');
+                if (lbl) lbl.textContent = `${state.beatCounter}拍`;
+                if (panel) {
+                    panel.classList.remove('pulse-beat', 'pulse-accent');
+                    void panel.offsetWidth;
+                    panel.classList.add(isAccent ? 'pulse-accent' : 'pulse-beat');
+                }
+                if (led) {
+                    led.style.backgroundColor = isAccent ? '#00E5FF' : '#FFD600';
+                    led.style.transform = 'scale(1.35)';
+                    setTimeout(() => {
+                        led.style.backgroundColor = '#374151';
+                        led.style.transform = 'scale(1)';
+                    }, 110);
+                }
+            }
+
+            function metronomeScheduler() {
+                if (!state.pacerActive || !state.audioCtx) return;
+                while (state.nextNoteTime < state.audioCtx.currentTime + 0.1) {
+                    state.beatCounter++;
+                    const isAccent = state.accentMode > 0 && (state.beatCounter % state.accentMode === 0);
+                    scheduleBeatSound(state.nextNoteTime, isAccent);
+                    state.nextNoteTime += 60.0 / state.targetSpm;
+                }
+            }
+
+            function setPacerRunning(active) {
+                unlockAudio();
+                state.pacerActive = active;
+                const btn = $('btnTogglePacer');
+                const txt = $('pacerStatusText');
+                clearInterval(state.schedulerId);
+
+                if (active) {
+                    state.beatCounter = 0;
+                    state.nextNoteTime = state.audioCtx ? state.audioCtx.currentTime + 0.05 : 0;
+                    state.schedulerId = setInterval(metronomeScheduler, 25);
+                    if (btn) {
+                        btn.classList.remove('bg-marine-amber/20', 'text-marine-amber');
+                        btn.classList.add('bg-marine-amber', 'text-black');
+                    }
+                    if (txt) txt.textContent = '開';
+                } else {
+                    if (btn) {
+                        btn.classList.add('bg-marine-amber/20', 'text-marine-amber');
+                        btn.classList.remove('bg-marine-amber', 'text-black');
+                    }
+                    if (txt) txt.textContent = '關';
+                }
+            }
+
+            function playCueTone(type) {
+                try {
+                    unlockAudio();
+                    if (!state.audioCtx) return;
+                    const now = state.audioCtx.currentTime;
+                    if (type === 'START') {
+                        const osc = state.audioCtx.createOscillator();
+                        const gain = state.audioCtx.createGain();
+                        osc.frequency.setValueAtTime(1480, now);
+                        gain.gain.setValueAtTime(0.85, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                        osc.connect(gain);
+                        gain.connect(state.audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.36);
+                    } else if (type === 'COUNTDOWN') {
+                        const osc = state.audioCtx.createOscillator();
+                        const gain = state.audioCtx.createGain();
+                        osc.frequency.setValueAtTime(880, now);
+                        gain.gain.setValueAtTime(0.65, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                        osc.connect(gain);
+                        gain.connect(state.audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.13);
+                    } else if (type === 'SET_DONE') {
+                        [1046, 1318].forEach((f, i) => {
+                            const osc = state.audioCtx.createOscillator();
+                            const gain = state.audioCtx.createGain();
+                            osc.frequency.setValueAtTime(f, now + i * 0.13);
+                            gain.gain.setValueAtTime(0.75, now + i * 0.13);
+                            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.13 + 0.2);
+                            osc.connect(gain);
+                            gain.connect(state.audioCtx.destination);
+                            osc.start(now + i * 0.13);
+                            osc.stop(now + i * 0.13 + 0.22);
+                        });
+                    } else if (type === 'ALL_DONE') {
+                        [880, 1174, 1568].forEach((f, i) => {
+                            const osc = state.audioCtx.createOscillator();
+                            const gain = state.audioCtx.createGain();
+                            osc.frequency.setValueAtTime(f, now + i * 0.15);
+                            gain.gain.setValueAtTime(0.8, now + i * 0.15);
+                            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.3);
+                            osc.connect(gain);
+                            gain.connect(state.audioCtx.destination);
+                            osc.start(now + i * 0.15);
+                            osc.stop(now + i * 0.15 + 0.32);
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            // --- GPS & SENSORS (iOS SAFARI & ANDROID COMPATIBLE) ---
+            function checkEnvironment() {
+                const isSecure = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+                const inIframe = window.self !== window.top;
+                return { isSecure, inIframe, protocol: location.protocol };
+            }
+
+            function updateGpsBadge(text, dotClass, pulse) {
+                const dot = $('gpsDot');
+                const lbl = $('gpsText');
+                if (dot) dot.className = `w-2 h-2 rounded-full ${dotClass} ${pulse ? 'animate-pulse' : ''} shrink-0`;
+                if (lbl) lbl.textContent = text;
+            }
+
+            function haversineMeters(lat1, lon1, lat2, lon2) {
+                const R = 6371000;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) ** 2 +
+                          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                          Math.sin(dLon / 2) ** 2;
+                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            }
+
+            function handleGpsSuccess(pos) {
+                clearTimeout(state.gpsFallbackTimer);
+                if (state.demoMode) return;
+
+                const { latitude, longitude, speed, accuracy } = pos.coords;
+                const nowMs = pos.timestamp || Date.now();
+                state.gpsAccuracy = Math.round(accuracy);
+                state.gpsDiagnosticReason = `GPS 已鎖定 (±${state.gpsAccuracy}m)`;
+
+                updateGpsBadge(
+                    `GPS 已鎖定 (±${state.gpsAccuracy}m)`,
+                    accuracy <= 25 ? 'bg-marine-green' : 'bg-marine-amber',
+                    false
+                );
+
+                let deltaMeters = 0;
+                let deltaSec = 0;
+                if (state.lastLat !== null && state.lastLon !== null && state.lastPosTime !== null) {
+                    deltaMeters = haversineMeters(state.lastLat, state.lastLon, latitude, longitude);
+                    deltaSec = Math.max(0.2, (nowMs - state.lastPosTime) / 1000);
+                }
+
+                // Dual-tier speed: native coords.speed OR Haversine delta/time (fixes iOS Safari null speed)
+                let kmh = 0;
+                if (speed !== null && speed !== undefined && !Number.isNaN(speed) && speed >= 0) {
+                    kmh = speed * 3.6;
+                } else if (deltaSec > 0 && deltaMeters >= 1.0 && deltaMeters < 100 && accuracy <= 45) {
+                    kmh = (deltaMeters / deltaSec) * 3.6;
+                }
+
+                if (kmh < 1.2) kmh = 0;
+                state.currentSpeedKmh = kmh;
+
+                if (state.isRunning && kmh > state.maxSpeedKmh) {
+                    state.maxSpeedKmh = kmh;
+                }
+
+                if (state.isRunning && state.lastLat !== null && state.lastLon !== null && accuracy <= 40) {
+                    if (deltaMeters >= 1.2 && deltaMeters < 85 && kmh > 0) {
+                        accumulateDistance(deltaMeters);
+                    }
+                }
+
+                state.lastLat = latitude;
+                state.lastLon = longitude;
+                state.lastPosTime = nowMs;
+                renderHUD();
+            }
+
+            function handleGpsError(err, isHighAccuracyPass) {
+                if (state.demoMode) return;
+                const env = checkEnvironment();
+
+                if (err && err.code === 1) {
+                    clearTimeout(state.gpsFallbackTimer);
+                    if (!env.isSecure) {
+                        state.gpsDiagnosticReason = '需 HTTPS 網址';
+                        updateGpsBadge('需 HTTPS 網址', 'bg-marine-red', false);
+                    } else if (env.inIframe) {
+                        state.gpsDiagnosticReason = '視窗框架限制';
+                        updateGpsBadge('視窗框架限制', 'bg-marine-red', false);
+                    } else {
+                        state.gpsDiagnosticReason = '權限被拒 (請開定位)';
+                        updateGpsBadge('權限被拒', 'bg-marine-red', false);
+                    }
+                    return;
+                }
+
+                if (isHighAccuracyPass) {
+                    state.gpsDiagnosticReason = '衛星較弱，切換輔助定位...';
+                    updateGpsBadge('GPS 搜尋中...', 'bg-marine-amber', true);
+                    startGpsWatch(false);
+                } else {
+                    state.gpsDiagnosticReason = '室內無衛星訊號';
+                    updateGpsBadge('室內無衛星訊號', 'bg-marine-red', false);
+                }
+            }
+
+            function startGpsWatch(highAccuracy) {
+                try {
+                    if (state.gpsWatchId !== null && 'geolocation' in navigator) {
+                        navigator.geolocation.clearWatch(state.gpsWatchId);
+                        state.gpsWatchId = null;
+                    }
+                    clearTimeout(state.gpsFallbackTimer);
+                } catch (e) {}
+
+                if (!('geolocation' in navigator)) {
+                    state.gpsDiagnosticReason = '瀏覽器不支援 GPS';
+                    updateGpsBadge('不支援 GPS', 'bg-marine-red', false);
+                    return;
+                }
+
+                const env = checkEnvironment();
+                if (!env.isSecure) {
+                    state.gpsDiagnosticReason = '需 HTTPS 網址';
+                    updateGpsBadge('需 HTTPS 網址', 'bg-marine-red', false);
+                    return;
+                }
+
+                if (!state.demoMode) {
+                    updateGpsBadge('GPS 搜尋中...', 'bg-marine-amber', true);
+                }
+
+                try {
+                    state.gpsWatchId = navigator.geolocation.watchPosition(
+                        (pos) => handleGpsSuccess(pos),
+                        (err) => handleGpsError(err, highAccuracy),
+                        {
+                            enableHighAccuracy: highAccuracy,
+                            maximumAge: highAccuracy ? 1000 : 5000,
+                            timeout: highAccuracy ? 6000 : 12000
+                        }
+                    );
+
+                    if (highAccuracy) {
+                        state.gpsFallbackTimer = setTimeout(() => {
+                            if (state.gpsAccuracy === null && !state.demoMode) {
+                                handleGpsError({ code: 3 }, true);
+                            }
+                        }, 6200);
+                    }
+                } catch (e) {
+                    state.gpsDiagnosticReason = env.inIframe ? '視窗框架限制' : 'GPS 啟動失敗';
+                    updateGpsBadge(state.gpsDiagnosticReason, 'bg-marine-red', false);
+                }
+            }
+
+            // --- ACCELEROMETER & STROKE RATE ---
+            function attachMotionListener() {
+                if (state.motionListenerAttached) return;
+                state.motionListenerAttached = true;
+                window.addEventListener('devicemotion', (e) => {
+                    if (state.demoMode) return;
+                    const acc = e.acceleration;
+                    if (!acc || (acc.x === null && acc.y === null)) return;
+                    const surge = Math.hypot(acc.x || 0, acc.y || 0);
+                    state.accelFiltered = state.accelFiltered * 0.72 + surge * 0.28;
+                    const now = performance.now();
+                    if (state.accelFiltered > 2.4 && (now - state.lastStrokeTime) > 430) {
+                        recordStroke(now);
+                    }
+                });
+            }
+
+            async function requestIosMotionPermission() {
+                try {
+                    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                        if (!state.motionPermissionGranted) {
+                            const res = await DeviceMotionEvent.requestPermission();
+                            if (res === 'granted') {
+                                state.motionPermissionGranted = true;
+                                attachMotionListener();
+                            }
+                        }
+                    } else if (typeof DeviceMotionEvent !== 'undefined') {
+                        state.motionPermissionGranted = true;
+                        attachMotionListener();
+                    }
+                } catch (e) {}
+            }
+
+            function recordStroke(now) {
+                state.lastStrokeTime = now;
+                if (state.isRunning && (state.workoutMode === 'FREE' || state.phase === 'WORK')) {
+                    state.totalStrokes++;
+                    state.phaseStrokes++;
+                }
+                state.strokeTimestamps.push(now);
+                if (state.strokeTimestamps.length > 5) state.strokeTimestamps.shift();
+                if (state.strokeTimestamps.length >= 2) {
+                    const span = state.strokeTimestamps[state.strokeTimestamps.length - 1] - state.strokeTimestamps[0];
+                    const avgSec = (span / (state.strokeTimestamps.length - 1)) / 1000;
+                    const spm = Math.round(60 / avgSec);
+                    if (spm >= 25 && spm <= 150) state.liveSpm = spm;
+                }
+                renderHUD();
+            }
+
+            setInterval(() => {
+                if (!state.demoMode && state.liveSpm > 0 && (performance.now() - state.lastStrokeTime) > 3500) {
+                    state.liveSpm = 0;
+                    state.strokeTimestamps = [];
+                    renderHUD();
+                }
+            }, 1000);
+
+            // --- INTERVAL & WORKOUT ENGINE ---
+            function accumulateDistance(meters) {
+                state.totalDistanceM += meters;
+                if (state.workoutMode === 'FREE' || state.phase === 'WORK') {
+                    state.phaseDistanceM += meters;
+                }
+                checkIntervalTransitions();
+            }
+
+            function startWorkSet(setNum) {
+                state.phase = 'WORK';
+                state.currentSet = setNum;
+                state.phaseElapsedMs = 0;
+                state.phaseDistanceM = 0;
+                state.phaseStrokes = 0;
+                state.lastRestCountdownSec = -1;
+
+                playCueTone('START');
+                if (state.autoLinkPacer) {
+                    setPacerRunning(true);
+                }
+                showToast(`▶ 開始第 ${setNum}/${state.totalSets} 組衝刺！`);
+            }
+
+            function completeWorkSet() {
+                const dist = state.workType === 'DIST'
+                    ? Math.max(state.workTarget, Math.round(state.phaseDistanceM))
+                    : Math.round(state.phaseDistanceM);
+                const sec = Math.max(0.1, state.phaseElapsedMs / 1000);
+                const avgKmh = (dist / 1000) / (sec / 3600);
+                const avgSpm = sec > 2 ? Math.round(state.phaseStrokes / (sec / 60)) : state.liveSpm;
+
+                state.currentSplits.push({
+                    setNum: state.currentSet,
+                    distanceM: dist,
+                    timeStr: formatTime(state.phaseElapsedMs),
+                    avgSpeedKmh: avgKmh.toFixed(1),
+                    split500Str: format500mSplit(avgKmh),
+                    avgSpm: avgSpm || 0
+                });
+
+                if (state.currentSet >= state.totalSets) {
+                    finishEntireWorkout();
+                } else {
+                    state.phase = 'REST';
+                    state.phaseElapsedMs = 0;
+                    state.phaseDistanceM = 0;
+                    state.lastRestCountdownSec = -1;
+                    playCueTone('SET_DONE');
+                    if (state.autoLinkPacer) {
+                        setPacerRunning(false);
+                    }
+                    showToast(`✓ 第 ${state.currentSet} 組完成！進入休息 (${formatRestClock(state.restSec)})`);
+                }
+            }
+
+            function finishEntireWorkout() {
+                state.isRunning = false;
+                state.phase = 'DONE';
+                clearInterval(state.mainLoopId);
+                if (state.autoLinkPacer) {
+                    setPacerRunning(false);
+                }
+                playCueTone('ALL_DONE');
+                saveWorkoutToStorage();
+                updateTransportButtons();
+                renderHUD();
+                showToast('🏆 全部間歇訓練組數已完成！');
+                setTimeout(() => {
+                    renderHistoryModal();
+                    openModal('historyModal');
+                }, 600);
+            }
+
+            function checkIntervalTransitions() {
+                if (!state.isRunning || state.workoutMode !== 'INTERVAL') return;
+
+                if (state.phase === 'WORK') {
+                    if (state.workType === 'DIST' && state.phaseDistanceM >= state.workTarget) {
+                        completeWorkSet();
+                    } else if (state.workType === 'TIME' && (state.phaseElapsedMs / 1000) >= state.workTarget) {
+                        completeWorkSet();
+                    }
+                } else if (state.phase === 'REST') {
+                    const remainingSec = Math.ceil(state.restSec - (state.phaseElapsedMs / 1000));
+                    if (remainingSec <= 5 && remainingSec >= 1 && remainingSec !== state.lastRestCountdownSec) {
+                        state.lastRestCountdownSec = remainingSec;
+                        playCueTone('COUNTDOWN');
+                    }
+                    if ((state.phaseElapsedMs / 1000) >= state.restSec) {
+                        startWorkSet(state.currentSet + 1);
+                    }
+                }
+            }
+
+            function tickWorkoutLoop() {
+                if (!state.isRunning) return;
+                const now = performance.now();
+                const dt = now - state.lastTickTime;
+                state.lastTickTime = now;
+
+                state.totalElapsedMs += dt;
+                state.phaseElapsedMs += dt;
+
+                checkIntervalTransitions();
+                renderHUD();
+            }
+
+            function resetWorkoutState() {
+                state.isRunning = false;
+                clearInterval(state.mainLoopId);
+                state.phase = 'READY';
+                state.currentSet = 1;
+                state.totalElapsedMs = 0;
+                state.phaseElapsedMs = 0;
+                state.phaseDistanceM = 0;
+                state.phaseStrokes = 0;
+                state.totalDistanceM = 0;
+                state.totalStrokes = 0;
+                state.maxSpeedKmh = 0;
+                state.currentSplits = [];
+                state.lastRestCountdownSec = -1;
+                setPacerRunning(false);
+                updateTransportButtons();
+                renderHUD();
+            }
+
+            function updateTransportButtons() {
+                const btn = $('btnStartPause');
+                const txt = $('startPauseText');
+                if (!btn || !txt) return;
+                if (state.isRunning) {
+                    btn.classList.remove('bg-marine-green');
+                    btn.classList.add('bg-marine-amber');
+                    txt.textContent = '⏸ 暫停 PAUSE';
+                } else {
+                    btn.classList.add('bg-marine-green');
+                    btn.classList.remove('bg-marine-amber');
+                    txt.textContent = state.phase === 'READY' || state.phase === 'DONE' ? '▶ 開始訓練 START' : '▶ 繼續 RESUME';
+                }
+            }
+
+            // --- FORMATTING & HUD RENDERING ---
+            function formatTime(ms) {
+                const safeMs = Math.max(0, ms);
+                const tenths = Math.floor(safeMs / 100) % 10;
+                const totalSec = Math.floor(safeMs / 1000);
+                const secs = totalSec % 60;
+                const mins = Math.floor(totalSec / 60);
+                return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+            }
+
+            function formatRestClock(totalSec) {
+                const s = Math.max(0, Math.ceil(totalSec));
+                const mins = Math.floor(s / 60);
+                const secs = s % 60;
+                return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+
+            function format500mSplit(kmh) {
+                if (kmh < 1.5) return '--:--.-';
+                const secPer500 = 500 / (kmh / 3.6);
+                if (secPer500 > 3599) return '--:--.-';
+                const m = Math.floor(secPer500 / 60);
+                const s = (secPer500 % 60).toFixed(1).padStart(4, '0');
+                return `${String(m).padStart(2, '0')}:${s}`;
+            }
+
+            function renderHUD() {
+                const spdStr = state.currentSpeedKmh.toFixed(1);
+                const splitStr = format500mSplit(state.currentSpeedKmh);
+                if (state.primaryMode === 'SPEED') {
+                    $('primaryLabel').textContent = '船速 SPEED';
+                    $('primaryLabel').className = 'text-xs sm:text-sm font-extrabold tracking-wider uppercase text-marine-cyan';
+                    $('primaryUnit').textContent = 'km/h';
+                    $('primaryValue').textContent = spdStr;
+                    $('secondarySpeedLabel').textContent = '500m Split: ';
+                    $('secondarySpeedValue').textContent = splitStr;
+                } else {
+                    $('primaryLabel').textContent = '500M 分段 SPLIT';
+                    $('primaryLabel').className = 'text-xs sm:text-sm font-extrabold tracking-wider uppercase text-marine-amber';
+                    $('primaryUnit').textContent = '/ 500m';
+                    $('primaryValue').textContent = splitStr;
+                    $('secondarySpeedLabel').textContent = '即時船速: ';
+                    $('secondarySpeedValue').textContent = `${spdStr} km/h`;
+                }
+
+                const avgKmh = state.totalElapsedMs > 1500 ? ((state.totalDistanceM / 1000) / (state.totalElapsedMs / 3600000)) : 0;
+                $('avgSpeedValue').textContent = avgKmh.toFixed(1);
+                $('maxSpeedValue').textContent = state.maxSpeedKmh.toFixed(1);
+
+                $('liveSpmValue').textContent = state.liveSpm;
+                $('totalStrokesValue').textContent = state.totalStrokes;
+                let dps = 0;
+                if (state.liveSpm > 0 && state.currentSpeedKmh > 1.0) {
+                    dps = (state.currentSpeedKmh / 3.6) / (state.liveSpm / 60);
+                }
+                $('dpsValue').textContent = `${dps.toFixed(2)} m`;
+
+                const badge = $('phaseBadge');
+                const pDist = $('intervalPrimaryDist');
+                const tHint = $('intervalTargetHint');
+                const pBar = $('intervalProgressBar');
+                const stLabel = $('setTimerLabel');
+                const stVal = $('setTimerValue');
+
+                if (state.workoutMode === 'FREE') {
+                    badge.textContent = 'FREE 自由划';
+                    badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-marine-green/20 text-marine-green font-extrabold truncate';
+                    pDist.innerHTML = `${Math.round(state.totalDistanceM)}<span class="text-sm text-gray-400 ml-0.5">m</span>`;
+                    tHint.textContent = '不限距離';
+                    pBar.style.width = '0%';
+                    stLabel.textContent = '總時間';
+                    stVal.textContent = formatTime(state.totalElapsedMs);
+                } else {
+                    const unitSuffix = state.workType === 'DIST' ? 'm' : 's';
+                    if (state.phase === 'READY') {
+                        badge.textContent = `READY ${state.totalSets}×${state.workTarget}${unitSuffix}`;
+                        badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-marine-cyan/20 text-marine-cyan font-extrabold truncate';
+                        pDist.innerHTML = `0<span class="text-sm text-gray-400 ml-0.5">m</span>`;
+                        tHint.textContent = `休 ${formatRestClock(state.restSec)}`;
+                        pBar.style.width = '0%';
+                        pBar.className = 'h-full bg-marine-cyan transition-all duration-150';
+                        stLabel.textContent = '單組計時';
+                        stVal.textContent = '00:00.0';
+                    } else if (state.phase === 'WORK') {
+                        badge.textContent = `WORK 第${state.currentSet}/${state.totalSets}組`;
+                        badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-marine-green/25 text-marine-green font-extrabold truncate';
+                        if (state.workType === 'DIST') {
+                            const rem = Math.max(0, Math.round(state.workTarget - state.phaseDistanceM));
+                            pDist.innerHTML = `${Math.round(state.phaseDistanceM)}<span class="text-sm text-gray-400 ml-0.5">m</span>`;
+                            tHint.textContent = `餘 ${rem}m`;
+                            pBar.style.width = `${Math.min(100, (state.phaseDistanceM / state.workTarget) * 100)}%`;
+                        } else {
+                            const remSec = Math.max(0, state.workTarget - (state.phaseElapsedMs / 1000));
+                            pDist.innerHTML = `${remSec.toFixed(1)}<span class="text-sm text-gray-400 ml-0.5">s</span>`;
+                            tHint.textContent = `${Math.round(state.phaseDistanceM)}m`;
+                            pBar.style.width = `${Math.min(100, ((state.phaseElapsedMs / 1000) / state.workTarget) * 100)}%`;
+                        }
+                        pBar.className = 'h-full bg-marine-green transition-all duration-150';
+                        stLabel.textContent = '衝刺計時';
+                        stVal.textContent = formatTime(state.phaseElapsedMs);
+                    } else if (state.phase === 'REST') {
+                        badge.textContent = `REST 休息中 (${state.currentSet}/${state.totalSets})`;
+                        badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-marine-amber/25 text-marine-amber font-extrabold truncate';
+                        const remRest = Math.max(0, state.restSec - (state.phaseElapsedMs / 1000));
+                        pDist.innerHTML = `<span class="text-marine-amber">${formatRestClock(remRest)}</span>`;
+                        tHint.textContent = `下組 第${state.currentSet + 1}組`;
+                        pBar.style.width = `${Math.min(100, ((state.phaseElapsedMs / 1000) / Math.max(1, state.restSec)) * 100)}%`;
+                        pBar.className = 'h-full bg-marine-amber transition-all duration-150';
+                        stLabel.textContent = '總訓練時間';
+                        stVal.textContent = formatTime(state.totalElapsedMs);
+                    } else if (state.phase === 'DONE') {
+                        badge.textContent = `DONE 完成 ${state.totalSets} 組`;
+                        badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-marine-cyan/25 text-marine-cyan font-extrabold truncate';
+                        pDist.innerHTML = `${Math.round(state.totalDistanceM)}<span class="text-sm text-gray-400 ml-0.5">m</span>`;
+                        tHint.textContent = '已完成';
+                        pBar.style.width = '100%';
+                        stLabel.textContent = '總時間';
+                        stVal.textContent = formatTime(state.totalElapsedMs);
+                    }
+                }
+            }
+
+            // --- STORAGE & HISTORY ---
+            function saveWorkoutToStorage() {
+                try {
+                    const logs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+                    const avgKmh = state.totalElapsedMs > 1000 ? ((state.totalDistanceM / 1000) / (state.totalElapsedMs / 3600000)).toFixed(1) : '0.0';
+                    logs.unshift({
+                        id: Date.now(),
+                        date: new Date().toLocaleString('zh-HK', { hour12: false }),
+                        title: state.workoutMode === 'INTERVAL'
+                            ? `間歇 ${state.totalSets}×${state.workTarget}${state.workType === 'DIST' ? 'm' : 's'}`
+                            : '自由划 Just Row',
+                        totalDistanceM: Math.round(state.totalDistanceM),
+                        totalDuration: formatTime(state.totalElapsedMs),
+                        avgSpeedKmh: avgKmh,
+                        maxSpeedKmh: state.maxSpeedKmh.toFixed(1),
+                        splits: state.currentSplits.slice()
+                    });
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(0, 30)));
+                } catch (e) {}
+            }
+
+            function renderHistoryModal() {
+                const container = $('historyContent');
+                if (!container) return;
+                let logs = [];
+                try {
+                    logs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+                } catch (e) {}
+
+                let html = '';
+                if (state.currentSplits.length > 0) {
+                    html += `
+                        <div class="rounded-2xl bg-marine-panel border-2 border-marine-cyan/60 p-3 font-mono">
+                            <div class="text-xs font-extrabold text-marine-cyan mb-2">本次間歇分段明細 (Splits)</div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="text-gray-400 border-b border-white/10">
+                                        <tr>
+                                            <th class="py-1">組別</th>
+                                            <th class="py-1">距離</th>
+                                            <th class="py-1">時間</th>
+                                            <th class="py-1">均速</th>
+                                            <th class="py-1">500m</th>
+                                            <th class="py-1">SPM</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-white/5">
+                                        ${state.currentSplits.map(sp => `
+                                            <tr>
+                                                <td class="py-1.5 font-bold text-marine-amber">#${sp.setNum}</td>
+                                                <td class="py-1.5">${sp.distanceM}m</td>
+                                                <td class="py-1.5 font-bold text-white">${sp.timeStr}</td>
+                                                <td class="py-1.5 text-marine-green">${sp.avgSpeedKmh}</td>
+                                                <td class="py-1.5 text-marine-cyan">${sp.split500Str}</td>
+                                                <td class="py-1.5">${sp.avgSpm}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (logs.length === 0 && state.currentSplits.length === 0) {
+                    html += `<div class="text-center text-gray-500 py-12 text-sm">暫無訓練記錄，完成訓練後將自動儲存於此。</div>`;
+                } else {
+                    html += logs.map(log => `
+                        <div class="rounded-2xl bg-marine-panel border border-marine-border p-3 font-mono space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="font-extrabold text-marine-amber">${log.title}</span>
+                                <span class="text-gray-400">${log.date}</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-1.5 text-center bg-black/60 rounded-xl p-2">
+                                <div><div class="text-[10px] text-gray-400">總距</div><div class="text-xs font-bold">${log.totalDistanceM}m</div></div>
+                                <div><div class="text-[10px] text-gray-400">總時</div><div class="text-xs font-bold">${log.totalDuration}</div></div>
+                                <div><div class="text-[10px] text-gray-400">均速</div><div class="text-xs font-bold text-marine-cyan">${log.avgSpeedKmh}</div></div>
+                                <div><div class="text-[10px] text-gray-400">極速</div><div class="text-xs font-bold text-marine-green">${log.maxSpeedKmh}</div></div>
+                            </div>
+                            ${log.splits && log.splits.length > 0 ? `
+                                <div class="text-[11px] text-gray-300 space-y-1 pt-1 border-t border-white/10">
+                                    ${log.splits.map(s => `
+                                        <div class="flex justify-between">
+                                            <span class="text-marine-amber">第${s.setNum}組 (${s.distanceM}m)</span>
+                                            <span>${s.timeStr} | ${s.avgSpeedKmh}km/h | ${s.split500Str} | ${s.avgSpm}SPM</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('');
+                }
+                container.innerHTML = html;
+            }
+
+            // --- WATER LOCK HOLD LOGIC ---
+            let holdUnlockTimer = null;
+            function resetUnlockProgress() {
+                const fill = $('unlockProgressFill');
+                if (fill) {
+                    fill.style.transition = 'none';
+                    fill.style.width = '0%';
+                }
+            }
+
+            // --- PUBLIC API EXPOSED TO WINDOW.SC ---
+            const api = {
+                togglePrimaryMetric() {
+                    state.primaryMode = state.primaryMode === 'SPEED' ? 'SPLIT' : 'SPEED';
+                    renderHUD();
+                },
+
+                manualStroke() {
+                    recordStroke(performance.now());
+                },
+
+                toggleStartPause() {
+                    unlockAudio();
+                    requestWakeLock();
+                    requestIosMotionPermission();
+                    if (!state.demoMode && state.gpsWatchId === null) {
+                        startGpsWatch(true);
+                    }
+
+                    if (!state.isRunning) {
+                        if (state.phase === 'DONE') {
+                            resetWorkoutState();
+                        }
+                        state.isRunning = true;
+                        state.lastTickTime = performance.now();
+
+                        if (state.workoutMode === 'INTERVAL' && state.phase === 'READY') {
+                            startWorkSet(1);
+                        } else if (state.workoutMode === 'FREE' && state.phase === 'READY') {
+                            state.phase = 'WORK';
+                            playCueTone('START');
+                            if (state.autoLinkPacer) setPacerRunning(true);
+                        }
+
+                        clearInterval(state.mainLoopId);
+                        state.mainLoopId = setInterval(tickWorkoutLoop, 100);
+                    } else {
+                        state.isRunning = false;
+                        clearInterval(state.mainLoopId);
+                        if (state.autoLinkPacer && state.pacerActive) {
+                            setPacerRunning(false);
+                        }
+                    }
+                    updateTransportButtons();
+                    renderHUD();
+                },
+
+                stopAndReset() {
+                    if (state.currentSplits.length > 0 || state.totalDistanceM > 10 || state.totalElapsedMs > 3000) {
+                        saveWorkoutToStorage();
+                        showToast('訓練數據已儲存並重設');
+                    } else {
+                        showToast('已重設數據');
+                    }
+                    resetWorkoutState();
+                },
+
+                adjustSpm(delta) {
+                    state.targetSpm = Math.min(140, Math.max(30, state.targetSpm + delta));
+                    const el = $('targetSpmDisplay');
+                    if (el) el.textContent = state.targetSpm;
+                },
+
+                togglePacer() {
+                    setPacerRunning(!state.pacerActive);
+                    showToast(state.pacerActive ? `節拍器已開啟 (${state.targetSpm} SPM)` : '節拍器已關閉');
+                },
+
+                cycleAccent() {
+                    const modes = [10, 20, 0];
+                    state.accentMode = modes[(modes.indexOf(state.accentMode) + 1) % modes.length];
+                    const btn = $('btnAccentMode');
+                    if (btn) btn.textContent = state.accentMode === 0 ? '無重拍' : `每${state.accentMode}槳`;
+                },
+
+                toggleAutoLink() {
+                    state.autoLinkPacer = !state.autoLinkPacer;
+                    const btn = $('btnAutoLink');
+                    if (!btn) return;
+                    if (state.autoLinkPacer) {
+                        btn.textContent = '連動: 開';
+                        btn.className = 'px-2 py-1 rounded-md bg-marine-green/20 border border-marine-green/60 text-[11px] font-extrabold text-marine-green active:scale-95';
+                        showToast('已開啟間歇自動連動節拍器');
+                    } else {
+                        btn.textContent = '連動: 關';
+                        btn.className = 'px-2 py-1 rounded-md bg-black border border-marine-border text-[11px] font-bold text-gray-400 active:scale-95';
+                        showToast('已關閉自動連動（手動控制節拍器）');
+                    }
+                },
+
+                toggleDemo() {
+                    state.demoMode = !state.demoMode;
+                    const btn = $('btnToggleDemo');
+                    clearInterval(state.demoSimId);
+
+                    if (state.demoMode) {
+                        if (btn) {
+                            btn.textContent = '模擬: 開';
+                            btn.classList.remove('text-gray-300', 'border-marine-border');
+                            btn.classList.add('text-marine-cyan', 'border-marine-cyan');
+                        }
+                        updateGpsBadge('模擬模式', 'bg-marine-cyan', false);
+                        showToast('已開啟室內模擬（按 START 測試衝刺與休息）');
+
+                        let tick = 0;
+                        state.demoSimId = setInterval(() => {
+                            tick++;
+                            if (state.isRunning && (state.workoutMode === 'FREE' || state.phase === 'WORK')) {
+                                const spd = 13.4 + Math.sin(tick * 0.4) * 0.6;
+                                state.currentSpeedKmh = spd;
+                                if (spd > state.maxSpeedKmh) state.maxSpeedKmh = spd;
+                                accumulateDistance((spd / 3.6) * 0.25);
+
+                                state.liveSpm = state.targetSpm + Math.round(Math.sin(tick * 0.5));
+                                if (tick % 4 === 0) {
+                                    state.totalStrokes++;
+                                    state.phaseStrokes++;
+                                }
+                            } else if (state.isRunning && state.phase === 'REST') {
+                                state.currentSpeedKmh = 1.4;
+                                state.liveSpm = 0;
+                            } else {
+                                state.currentSpeedKmh = 0;
+                                state.liveSpm = 0;
+                            }
+                            renderHUD();
+                        }, 250);
+                    } else {
+                        if (btn) {
+                            btn.textContent = '模擬: 關';
+                            btn.classList.add('text-gray-300', 'border-marine-border');
+                            btn.classList.remove('text-marine-cyan', 'border-marine-cyan');
+                        }
+                        state.currentSpeedKmh = 0;
+                        state.liveSpm = 0;
+                        startGpsWatch(true);
+                        renderHUD();
+                    }
+                },
+
+                enableDemoFromModal() {
+                    if (!state.demoMode) api.toggleDemo();
+                },
+
+                retryGps() {
+                    if (state.demoMode) api.toggleDemo();
+                    state.gpsAccuracy = null;
+                    state.lastLat = null;
+                    state.lastLon = null;
+                    state.lastPosTime = null;
+                    showToast('📡 正在重新請求 GPS 衛星定位...');
+                    startGpsWatch(true);
+                },
+
+                openGpsHelp() {
+                    const env = checkEnvironment();
+                    const sEl = $('diagStatusText');
+                    const pEl = $('diagProtocolText');
+                    const fEl = $('diagFrameText');
+                    if (sEl) sEl.textContent = state.demoMode ? '室內模擬模式運行中' : state.gpsDiagnosticReason;
+                    if (pEl) {
+                        pEl.textContent = env.isSecure ? `安全 (${env.protocol})` : `不安全 (${env.protocol}) — 需 HTTPS`;
+                        pEl.className = env.isSecure ? 'font-bold text-marine-green' : 'font-bold text-marine-red';
+                    }
+                    if (fEl) {
+                        fEl.textContent = env.inIframe ? '嵌入預覽框 (可能受限)' : '獨立全螢幕視窗 (正常)';
+                        fEl.className = env.inIframe ? 'font-bold text-marine-amber' : 'font-bold text-marine-green';
+                    }
+                    openModal('gpsHelpModal');
+                },
+
+                closeGpsHelp() {
+                    closeModal('gpsHelpModal');
+                },
+
+                // --- WORKOUT MODAL METHODS ---
+                openWorkoutModal() {
+                    state.draftWorkoutMode = state.workoutMode;
+                    state.draftWorkType = state.workType;
+                    $('inputSets').value = state.totalSets;
+                    $('inputWorkVal').value = state.workTarget;
+                    $('inputRestMin').value = Math.floor(state.restSec / 60);
+                    $('inputRestSec').value = state.restSec % 60;
+                    api.setDraftMode(state.draftWorkoutMode);
+                    api.setDraftWorkType(state.draftWorkType);
+                    openModal('workoutModal');
+                },
+
+                closeWorkoutModal() {
+                    closeModal('workoutModal');
+                },
+
+                setDraftMode(mode) {
+                    state.draftWorkoutMode = mode;
+                    const tInt = $('tabIntervalMode');
+                    const tFree = $('tabFreeMode');
+                    const secInt = $('intervalConfigSection');
+                    const secFree = $('freeModeSection');
+                    if (mode === 'INTERVAL') {
+                        tInt.className = 'py-2.5 rounded-xl bg-marine-cyan text-black font-extrabold text-sm transition';
+                        tFree.className = 'py-2.5 rounded-xl bg-marine-panel border border-marine-border text-gray-300 font-extrabold text-sm transition';
+                        secInt.classList.remove('hidden');
+                        secFree.classList.add('hidden');
+                    } else {
+                        tFree.className = 'py-2.5 rounded-xl bg-marine-cyan text-black font-extrabold text-sm transition';
+                        tInt.className = 'py-2.5 rounded-xl bg-marine-panel border border-marine-border text-gray-300 font-extrabold text-sm transition';
+                        secFree.classList.remove('hidden');
+                        secInt.classList.add('hidden');
+                    }
+                },
+
+                setDraftWorkType(type) {
+                    state.draftWorkType = type;
+                    const bDist = $('btnWorkTypeDist');
+                    const bTime = $('btnWorkTypeTime');
+                    const hint = $('workUnitHint');
+                    if (type === 'DIST') {
+                        bDist.className = 'px-2.5 py-1 rounded-md bg-marine-amber text-black text-xs font-extrabold';
+                        bTime.className = 'px-2.5 py-1 rounded-md text-gray-400 text-xs font-bold';
+                        hint.textContent = '每組衝刺米數 (m)';
+                    } else {
+                        bTime.className = 'px-2.5 py-1 rounded-md bg-marine-amber text-black text-xs font-extrabold';
+                        bDist.className = 'px-2.5 py-1 rounded-md text-gray-400 text-xs font-bold';
+                        hint.textContent = '每組衝刺秒數 (s)';
+                    }
+                },
+
+                applyPreset(preset) {
+                    api.setDraftMode('INTERVAL');
+                    if (preset === '4x50m') {
+                        api.setDraftWorkType('DIST');
+                        $('inputSets').value = 4;
+                        $('inputWorkVal').value = 50;
+                        $('inputRestMin').value = 4;
+                        $('inputRestSec').value = 0;
+                    } else if (preset === '6x200m') {
+                        api.setDraftWorkType('DIST');
+                        $('inputSets').value = 6;
+                        $('inputWorkVal').value = 200;
+                        $('inputRestMin').value = 1;
+                        $('inputRestSec').value = 30;
+                    } else if (preset === '8x45s') {
+                        api.setDraftWorkType('TIME');
+                        $('inputSets').value = 8;
+                        $('inputWorkVal').value = 45;
+                        $('inputRestMin').value = 1;
+                        $('inputRestSec').value = 0;
+                    } else if (preset === '1x500m') {
+                        api.setDraftWorkType('DIST');
+                        $('inputSets').value = 1;
+                        $('inputWorkVal').value = 500;
+                        $('inputRestMin').value = 2;
+                        $('inputRestSec').value = 0;
+                    }
+                },
+
+                stepInput(id, delta, min, max) {
+                    const el = $(id);
+                    if (!el) return;
+                    const cur = parseInt(el.value, 10) || 0;
+                    el.value = Math.min(max, Math.max(min, cur + delta));
+                },
+
+                stepWorkVal(dir) {
+                    const step = state.draftWorkType === 'DIST' ? 10 : 5;
+                    api.stepInput('inputWorkVal', dir * step, 5, 10000);
+                },
+
+                applyWorkoutSettings() {
+                    state.workoutMode = state.draftWorkoutMode;
+                    state.workType = state.draftWorkType;
+                    state.totalSets = Math.min(30, Math.max(1, parseInt($('inputSets').value, 10) || 4));
+                    state.workTarget = Math.min(10000, Math.max(5, parseInt($('inputWorkVal').value, 10) || 50));
+                    const rMin = Math.min(59, Math.max(0, parseInt($('inputRestMin').value, 10) || 0));
+                    const rSec = Math.min(59, Math.max(0, parseInt($('inputRestSec').value, 10) || 0));
+                    state.restSec = Math.max(5, rMin * 60 + rSec);
+
+                    closeModal('workoutModal');
+                    resetWorkoutState();
+                    if (state.workoutMode === 'INTERVAL') {
+                        const u = state.workType === 'DIST' ? 'm' : '秒';
+                        showToast(`已套用: ${state.totalSets}組 × ${state.workTarget}${u}，休 ${formatRestClock(state.restSec)}`);
+                    } else {
+                        showToast('已切換為自由划模式');
+                    }
+                },
+
+                // --- HISTORY MODAL METHODS ---
+                openHistoryModal() {
+                    renderHistoryModal();
+                    openModal('historyModal');
+                },
+
+                closeHistoryModal() {
+                    closeModal('historyModal');
+                },
+
+                exportCsv() {
+                    try {
+                        const logs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+                        if (logs.length === 0 && state.currentSplits.length === 0) {
+                            showToast('沒有可匯出的成績數據');
+                            return;
+                        }
+                        const rows = [['SessionDate', 'Workout', 'Set', 'Distance(m)', 'Time', 'AvgSpeed(km/h)', '500mSplit', 'AvgSPM'].join(',')];
+                        logs.forEach(log => {
+                            if (log.splits && log.splits.length > 0) {
+                                log.splits.forEach(sp => {
+                                    rows.push([`"${log.date}"`, `"${log.title}"`, sp.setNum, sp.distanceM, sp.timeStr, sp.avgSpeedKmh, sp.split500Str, sp.avgSpm].join(','));
+                                });
+                            } else {
+                                rows.push([`"${log.date}"`, `"${log.title}"`, 'ALL', log.totalDistanceM, log.totalDuration, log.avgSpeedKmh, format500mSplit(parseFloat(log.avgSpeedKmh)), 0].join(','));
+                            }
+                        });
+                        const csv = '\uFEFF' + rows.join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `SpeedCoach_Splits_${new Date().toISOString().slice(0, 10)}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        showToast('CSV 成績表已匯出');
+                    } catch (e) {
+                        showToast('匯出失敗');
+                    }
+                },
+
+                clearHistory() {
+                    localStorage.removeItem(STORAGE_KEY);
+                    state.currentSplits = [];
+                    renderHistoryModal();
+                    showToast('已清除全部記錄');
+                },
+
+                // --- WATER LOCK METHODS ---
+                enableWaterLock() {
+                    state.isLocked = true;
+                    resetUnlockProgress();
+                    openModal('waterLockOverlay');
+                    showToast('🔒 防誤觸鎖定已啟動');
+                },
+
+                startUnlockHold(e) {
+                    if (e && e.cancelable) e.preventDefault();
+                    const fill = $('unlockProgressFill');
+                    if (fill) {
+                        fill.style.transition = 'width 1.5s linear';
+                        fill.style.width = '100%';
+                    }
+                    clearTimeout(holdUnlockTimer);
+                    holdUnlockTimer = setTimeout(() => {
+                        state.isLocked = false;
+                        closeModal('waterLockOverlay');
+                        resetUnlockProgress();
+                        showToast('🔓 螢幕已解鎖');
+                    }, 1500);
+                },
+
+                cancelUnlockHold() {
+                    clearTimeout(holdUnlockTimer);
+                    resetUnlockProgress();
+                },
+
+                init() {
+                    // Ensure all overlays are strictly closed at startup
+                    closeModal('workoutModal');
+                    closeModal('historyModal');
+                    closeModal('waterLockOverlay');
+                    closeModal('gpsHelpModal');
+
+                    startGpsWatch(true);
+                    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function') {
+                        attachMotionListener();
+                    }
+                    renderHUD();
+                }
+            };
+
+            // Run startup initialization once DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', api.init);
+            } else {
+                api.init();
+            }
+
+            return api;
+        })();
+    </script>
+</body>
+</html>
